@@ -25,7 +25,8 @@ typedef struct client_ctx_s {
 void *client_task(void *arg) 
 {
     client_ctx_t *client = (client_ctx_t *) arg;
-    size_t chunk_len, free_space, pos;    
+    size_t free_space, pos;
+    ssize_t chunk_len;
     uint32_t buff[4] = {0};
     int res;
 
@@ -36,25 +37,24 @@ void *client_task(void *arg)
         assert(pos < sizeof(buff));
 
         chunk_len = recv(client->fd, &((uint8_t *) buff)[pos], free_space, 0);
-        switch ( chunk_len ) {
-        case (size_t) -1:
-            fprintf(stderr, "%s:%u: ERROR: recv failed (errno = %d; pos = %zu)!\n", 
+        if ( chunk_len <= 0 ) {
+            if ( chunk_len < 0 ) {
+                fprintf(stderr, "%s:%u: ERROR: recv failed (errno = %d; pos = %zu)!\n",
                         inet_ntoa(client->addr.sin_addr), 
                         ntohs(client->addr.sin_port),
                         errno, pos);
-            goto out;
-        case 0:
-            if ( pos && pos < sizeof(buff) ) {
-                fprintf(stderr, "%s:%u: ERROR: incomplete data block (pos = %zu)!\n", 
-                        inet_ntoa(client->addr.sin_addr), 
+            }
+            else if ( pos && pos < sizeof(buff) ) {
+                fprintf(stderr, "%s:%u: ERROR: incomplete data block (pos = %zu)!\n",
+                        inet_ntoa(client->addr.sin_addr),
                         ntohs(client->addr.sin_port),
                         pos);
             }
             goto out;
-        default:
-            assert(chunk_len <= free_space);
-            pos += chunk_len;
         }
+
+        assert(chunk_len <= free_space);
+        pos += chunk_len;
 
         if ( pos >= 4 && buff[0] != 0xAA55AA55) {
             fprintf(stderr, "%s:%u: ERROR: data corrupted (%08x)!\n", 
